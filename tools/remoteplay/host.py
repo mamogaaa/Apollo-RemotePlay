@@ -206,7 +206,12 @@ async def serve(args):
     host = Host(Store(args.state), secrets.randbelow(100000000), args.pairing_seconds)
     transports = []
     server = None
+    source = None
     try:
+        if args.apollo_state:
+            from apollo_source import ApolloSource
+            source = ApolloSource(args.apollo_state,args.apollo_app)
+            await source.start()
         loop = asyncio.get_running_loop()
         for profile in PROFILES.values():
             transport, _ = await loop.create_datagram_endpoint(lambda p=profile: Datagram(host, p), local_addr=(args.bind, profile.discovery_port))
@@ -215,10 +220,11 @@ async def serve(args):
         transports.append(transport)
         from takion import TakionServer
         for port in (9296,9297):
-            transport, _ = await loop.create_datagram_endpoint(lambda p=port: TakionServer(host,probe=p==9297), local_addr=(args.bind,port))
+            transport, _ = await loop.create_datagram_endpoint(lambda p=port: TakionServer(host,probe=p==9297,source=source if p==9296 else None), local_addr=(args.bind,port))
             transports.append(transport)
         server = await asyncio.start_server(host.client, args.bind, 9295, limit=8192)
-        print(f'Pairing PIN: {host.pin:08d} (valid {args.pairing_seconds}s). Test source: H.264 720p60 + Opus stereo; no Apollo capture yet.', flush=True)
+        source_name = 'Apollo live H.264 720p60 + Opus stereo' if source else 'test H.264 720p60 + Opus stereo'
+        print(f'Pairing PIN: {host.pin:08d} (valid {args.pairing_seconds}s). Source: {source_name}.', flush=True)
         async with server:
             await server.serve_forever()
     finally:
@@ -227,13 +233,18 @@ async def serve(args):
         if server:
             server.close()
             await server.wait_closed()
+        if source: await source.close()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--bind', default='127.0.0.1', help='Set to PC LAN IPv4 address for real client testing')
     parser.add_argument('--state', type=Path, default=Path(__file__).parent/'state.json')
     parser.add_argument('--pairing-seconds', type=int, default=300)
+    parser.add_argument('--apollo-state', type=Path, help='Directory created by apollo_control.py pair')
+    parser.add_argument('--apollo-app', type=int, help='Apollo application ID from apollo_control.py apps')
     args = parser.parse_args()
+    if bool(args.apollo_state) != (args.apollo_app is not None):
+        parser.error('--apollo-state and --apollo-app must be provided together')
     if not 1 <= args.pairing_seconds <= 3600:
         parser.error('pairing-seconds must be 1..3600')
     try:

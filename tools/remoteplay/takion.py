@@ -36,6 +36,8 @@ class Connection:
         self.video_index = 0
         self.task = None
         self.audio_task = None
+        self.prepare_task = None
+        self.source_started = False
         self.controller = Controller()
         self.last_input = time.monotonic()
         self.last = time.monotonic()
@@ -48,6 +50,8 @@ class Connection:
         self.closed = True
         if self.task: self.task.cancel()
         if self.audio_task: self.audio_task.cancel()
+        if self.prepare_task: self.prepare_task.cancel()
+        if self.source_started: self.server.source.end()
         self.controller.reset()
         for crypt in (self.tx,self.rx):
             if crypt: crypt.close()
@@ -102,6 +106,7 @@ class Connection:
                 seq = struct.unpack_from('!H',packet,1)[0]
                 self.controller.receive(typ,seq,payload)
                 self.last_input = time.monotonic()
+                if self.server.source: self.server.source.input(self.controller)
                 self.server.input_observed.update(self.controller.observed)
                 self.server.feedback_packets += 1
             return
@@ -187,13 +192,28 @@ class Connection:
             self.bang = True
             self.server.host.sessions.event('takion_keys_ready',self.active.pending.profile)
             # Wait until the client processes BANG and installs its receiving keys.
-            asyncio.get_running_loop().call_later(.05,self.stream_info)
+            self.prepare_task = asyncio.create_task(self.prepare_stream())
         elif msg.type == pb.TakionMessage.STREAMINFOACK and self.task is None:
             self.task = asyncio.create_task(self.video())
             self.audio_task = asyncio.create_task(self.audio())
             self.server.host.sessions.event('stream_started',self.active.pending.profile)
+        elif msg.type in (pb.TakionMessage.IDRREQUEST,pb.TakionMessage.CORRUPTFRAME):
+            if self.server.source: self.server.source.lib.rp_moon_idr()
         elif msg.type == pb.TakionMessage.HEARTBEAT:
             self.message(pb.TakionMessage(type=pb.TakionMessage.HEARTBEAT))
+
+    async def prepare_stream(self):
+        try:
+            if self.server.source:
+                self.source_started = True
+                self.server.video_header = await self.server.source.begin()
+            await asyncio.sleep(.05)
+            if not self.closed: self.stream_info()
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            print(f'Apollo stream setup failed: {exc}',flush=True)
+            self.close()
 
     def handle_probe(self,msg):
         if msg.type == pb.TakionMessage.TAKIONPROTOCOLREQUEST:
@@ -230,9 +250,9 @@ class Connection:
         deadline = asyncio.get_running_loop().time()
         try:
             while not self.closed and self.server.host.sessions.active.get(self.active.pending.profile.name) is self.active:
-                frame = self.server.frames[frame_index % len(self.server.frames)]
+                frame = await self.server.source.video() if self.server.source else self.server.frames[frame_index % len(self.server.frames)]
                 chunks = [frame[i:i+1102] for i in range(0,len(frame),1102)]
-                if len(chunks) > 255: raise ValueError('test frame exceeds FEC block size')
+                if len(chunks) > 255: raise ValueError('frame exceeds FEC block size')
                 units = [struct.pack('!H',1102-len(chunk)) + chunk for chunk in chunks]
                 units.append(parity(units,1104))
                 for unit, data in enumerate(units):
@@ -249,16 +269,20 @@ class Connection:
                     self.video_index += 1
                 frame_index += 1
                 deadline += 1/60
-                await asyncio.sleep(max(0,deadline-asyncio.get_running_loop().time()))
+                if not self.server.source:
+                    await asyncio.sleep(max(0,deadline-asyncio.get_running_loop().time()))
         except asyncio.CancelledError:
             pass
+        except Exception as exc:
+            print(f"Video stream failed: {exc}",flush=True)
+            self.close()
 
     async def audio(self):
         index = 0
         deadline = asyncio.get_running_loop().time()
         try:
             while not self.closed and self.server.host.sessions.active.get(self.active.pending.profile.name) is self.active:
-                data = self.server.audio_frames[index % len(self.server.audio_frames)]
+                data = await self.server.source.audio() if self.server.source else self.server.audio_frames[index % len(self.server.audio_frames)]
                 pos = self.position
                 self.position += ((len(data)+31)//16)*16
                 # One source unit, no redundant previous units in this first prototype.
@@ -268,19 +292,25 @@ class Connection:
                 self.send(self.sign(header+self.tx.crypt(data,pos+16),pos,10,14,False))
                 index += 1
                 deadline += .01
-                await asyncio.sleep(max(0,deadline-asyncio.get_running_loop().time()))
+                if not self.server.source:
+                    await asyncio.sleep(max(0,deadline-asyncio.get_running_loop().time()))
         except asyncio.CancelledError:
             pass
 
+        except Exception as exc:
+            print(f"Audio stream failed: {exc}",flush=True)
+            self.close()
+
 class TakionServer(asyncio.DatagramProtocol):
-    def __init__(self,host,probe=False,drop_test=False):
+    def __init__(self,host,probe=False,drop_test=False,source=None):
+        self.source = source
         self.host,self.probe = host,probe
         self.drop_test = drop_test
         self.connections = {}
         self.dropped_packets = 0
         self.feedback_packets = 0
         self.input_observed = set()
-        if not probe:
+        if not probe and not source:
             self.video_header,self.frames = prepare()
             self.audio_frames = prepare_audio()
         self.timer = None
@@ -303,6 +333,7 @@ class TakionServer(asyncio.DatagramProtocol):
                 continue
             if now-conn.last_input > 2:
                 conn.controller.reset()
+                if self.source and not self.probe: self.source.input(conn.controller)
             for item in list(conn.waiting.values()):
                 packet,sent,tries = item
                 if now-sent > .2:

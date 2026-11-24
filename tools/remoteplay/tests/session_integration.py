@@ -37,9 +37,14 @@ async def main():
         from takion import TakionServer
         probe, _ = await asyncio.get_running_loop().create_datagram_endpoint(lambda: TakionServer(host,probe=True), local_addr=('127.0.0.1',9297))
         udp = None
+        source = None
+        if "--live-fixture" in sys.argv:
+            from live_fixture import Fixture
+            source = Fixture()
+            await source.start()
         if mode == 'stream':
             from takion import TakionServer
-            udp, protocol = await asyncio.get_running_loop().create_datagram_endpoint(lambda: TakionServer(host,drop_test='--loss' in sys.argv), local_addr=('127.0.0.1',9296))
+            udp, protocol = await asyncio.get_running_loop().create_datagram_endpoint(lambda: TakionServer(host,drop_test='--loss' in sys.argv,source=source), local_addr=('127.0.0.1',9296))
         try:
             for profile in ('ps4','ps5'):
                 for attempt in range(1 if '--soak' in sys.argv else 2):
@@ -61,7 +66,12 @@ async def main():
                         if '--loss' in sys.argv:
                             assert protocol.dropped_packets > 0
                         from validate_media import validate
-                        validate(root/'build'/f'{profile}-received.h264',protocol.frames)
+                        validate(root/'build'/f'{profile}-received.h264',source.accepted if source else protocol.frames)
+                        if source:
+                            assert any(event[3] == 12345 for event in source.input_events)
+                            assert any(event[0] & 0x1000 for event in source.input_events)
+                            assert source.input_events[-1] == (0,0,0,0,0,0,0)
+                            source.input_events.clear()
                     await asyncio.sleep(1.1)
                     assert not host.sessions.active, 'control session leaked'
             print(f'PASS: real Chiaki {mode} and reconnect for both profiles')
@@ -70,5 +80,7 @@ async def main():
             await server.wait_closed()
             probe.close()
             if udp: udp.close()
+            await asyncio.sleep(0)
+            if source: await source.close()
 
 asyncio.run(main())
