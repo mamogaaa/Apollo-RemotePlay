@@ -1,4 +1,4 @@
-"""LAN research host: PS4/PS5 discovery and registration ONLY, no streaming yet."""
+"""LAN research host: PS4/PS5 registration and an encrypted test AV stream."""
 import argparse
 import asyncio
 import base64
@@ -9,6 +9,7 @@ from pathlib import Path
 import secrets
 import time
 from crypto import Crypto
+from session import Sessions, Rejected
 
 @dataclass(frozen=True)
 class Profile:
@@ -65,6 +66,7 @@ class Host:
         self.deadline = time.monotonic() + pairing_seconds
         self.crypto = Crypto()
         self.failures = {}
+        self.sessions = Sessions(self)
 
     def pairing(self):
         return time.monotonic() < self.deadline
@@ -112,6 +114,9 @@ class Host:
     async def client(self, reader, writer):
         peer = writer.get_extra_info('peername')[0]
         status, body = 400, b''
+        response_headers = {}
+        control = None
+        upgraded = False
         try:
             async with asyncio.timeout(5):
                 raw = await reader.readuntil(b'\r\n\r\n')
@@ -130,8 +135,20 @@ class Host:
                     raise ValueError('body too large')
                 payload = await reader.readexactly(size)
                 profile = next((p for p in PROFILES.values()
-                                if path == f'/sie/{p.name.lower()}/rp/sess/rgst'), None)
-                if not profile or method != 'POST':
+                                if path in (f'/sie/{p.name.lower()}/rp/sess/{a}' for a in ('rgst','init','ctrl'))), None)
+                action = path.rsplit('/', 1)[-1]
+                if profile and method == 'GET' and action in ('init', 'ctrl'):
+                    if payload:
+                        raise ValueError('session GET must have empty body')
+                    if h.get('rp-version') != profile.rp_version:
+                        response_headers['RP-Version'] = profile.rp_version
+                        raise Rejected(400, '80108b11')
+                    if action == 'init':
+                        response_headers.update(self.sessions.init(profile, peer, h))
+                        status = 200
+                    else:
+                        control = self.sessions.authorize(profile, peer, h, writer)
+                elif not profile or method != 'POST' or action != 'rgst':
                     status = 501
                 elif not self.pairing() or self.failures.get(peer, 0) >= 5:
                     status = 403
@@ -145,19 +162,30 @@ class Host:
                         self.failures[peer] = self.failures.get(peer, 0) + 1
                         status = 403
                     print(json.dumps({'event': 'registration', 'profile': profile.name, 'status': status}), flush=True)
+            if control:
+                upgraded = True
+                await self.sessions.control(control, reader)
+        except Rejected as exc:
+            status = exc.status
+            response_headers['RP-Application-Reason'] = exc.reason
         except (ValueError, UnicodeError, asyncio.IncompleteReadError, asyncio.LimitOverrunError, TimeoutError):
             status = 400
         except OSError:
             status = 500
         finally:
-            reason = {200: 'OK', 400: 'Bad Request', 403: 'Forbidden', 500: 'Internal Server Error', 501: 'Not Implemented'}[status]
+            reason = {200: 'OK', 400: 'Bad Request', 403: 'Forbidden', 500: 'Internal Server Error', 503: 'Service Unavailable', 501: 'Not Implemented'}[status]
             try:
-                writer.write(f'HTTP/1.1 {status} {reason}\r\nContent-Length: {len(body)}\r\nConnection: close\r\n\r\n'.encode() + body)
-                await writer.drain()
+                if not upgraded:
+                    extra = ''.join(f'{k}: {v}\r\n' for k, v in response_headers.items())
+                    writer.write(f'HTTP/1.1 {status} {reason}\r\n{extra}Content-Length: {len(body)}\r\nConnection: close\r\n\r\n'.encode() + body)
+                    await writer.drain()
             except (OSError, ConnectionError):
                 pass
             writer.close()
-            await writer.wait_closed()
+            try:
+                await writer.wait_closed()
+            except (OSError, ConnectionError):
+                pass
 
 class Datagram(asyncio.DatagramProtocol):
     def __init__(self, host, profile=None):
@@ -185,8 +213,12 @@ async def serve(args):
             transports.append(transport)
         transport, _ = await loop.create_datagram_endpoint(lambda: Datagram(host), local_addr=(args.bind, 9295))
         transports.append(transport)
+        from takion import TakionServer
+        for port in (9296,9297):
+            transport, _ = await loop.create_datagram_endpoint(lambda p=port: TakionServer(host,probe=p==9297), local_addr=(args.bind,port))
+            transports.append(transport)
         server = await asyncio.start_server(host.client, args.bind, 9295, limit=8192)
-        print(f'Pairing PIN: {host.pin:08d} (valid {args.pairing_seconds}s). Discovery/registration only; streaming not implemented.', flush=True)
+        print(f'Pairing PIN: {host.pin:08d} (valid {args.pairing_seconds}s). Test source: H.264 720p60 + Opus stereo; no Apollo capture yet.', flush=True)
         async with server:
             await server.serve_forever()
     finally:

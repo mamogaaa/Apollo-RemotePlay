@@ -55,8 +55,8 @@ class Tests(unittest.IsolatedAsyncioTestCase):
             server.close()
             await server.wait_closed()
 
-    async def test_streaming_explicitly_unimplemented(self):
-        response = await self.request(b'GET /sie/ps4/rp/sess/init HTTP/1.1\r\nContent-Length: 0\r\n\r\n')
+    async def test_unknown_endpoint_explicitly_unimplemented(self):
+        response = await self.request(b'GET /sie/ps4/rp/sess/unknown HTTP/1.1\r\nContent-Length: 0\r\n\r\n')
         self.assertTrue(response.startswith(b'HTTP/1.1 501'))
 
     async def test_reject_bad_framing(self):

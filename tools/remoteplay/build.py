@@ -13,7 +13,8 @@ if subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=T
 out = Path(__file__).resolve().parent / 'build'
 out.mkdir(exist_ok=True)
 subprocess.run(['cc', '-shared', '-fPIC', '-O2', '-I'+str(root/'lib/include'),
-                str(root/'lib/src/rpcrypt.c'), '-lcrypto', '-o', str(out/'librpcrypt.so')], check=True)
+                *[str(root/'lib/src'/f'{name}.c') for name in ('rpcrypt', 'gkcrypt', 'log', 'thread', 'time')],
+                str(out.parent/'gkbridge.c'), '-lcrypto', '-lpthread', '-o', str(out/'librpcrypt.so')], check=True)
 print(out/'librpcrypt.so')
 sources = ['regist', 'rpcrypt', 'base64', 'common', 'session', 'http', 'log', 'sock', 'thread', 'stoppipe', 'random', 'time', 'remote/rudp', 'remote/rudpsendbuffer']
 subprocess.run(['cc', '-O2', '-ffunction-sections', '-fdata-sections', '-Wl,--gc-sections',
