@@ -80,6 +80,20 @@ EXE требуют UCRT64 `bin` в PATH. MSYS2 здесь лишь инстру�
 .\.venv\Scripts\python.exe tools/remoteplay/host.py --bind 127.0.0.1 --apollo-state tools/remoteplay/build/apollo --apollo-app <Desktop-ID>
 ```
 
+Перед GUI можно отдельно проверить транспорт настоящего источника:
+
+```powershell
+.\.venv\Scripts\python.exe tools/remoteplay/tests/session_integration.py stream --apollo-state tools/remoteplay/build/apollo --apollo-app <Desktop-ID>
+```
+
+Этот тест регистрирует временные клиентские ключи и выполняет по два соединения
+для каждого профиля. Полученные H.264, Opus-пакеты и декодированный WAV остаются
+в закрытом от Git каталоге `tools/remoteplay/build`. FFmpeg проверяет видео,
+libopus — длительность аудиопакетов; уровень сигнала печатается отдельно.
+Тишина помечается явно и не считается подтверждением слышимого звука.
+Этот тест не заменяет проверку GUI и реакции реального приложения на ввод.
+Не запускать тест и `host.py` одновременно: они занимают одинаковые порты.
+
 4. В неизменённом Chiaki-ng добавить вручную `127.0.0.1`, выбрать PS4 >=8 либо
    PS5, указать Account ID и восьмизначный PIN host. Для локального прототипа
    допускается лабораторный восьмибайтовый Account ID `QkJCQkJCQkI=`;
