@@ -13,7 +13,8 @@ def validate(path, expected):
     for i, frame in enumerate(frames):
         assert frame == expected[i%len(expected)], f'Video frame {i} differs from source'
     subprocess.run(['ffmpeg','-v','error','-xerror','-i',str(path),'-f','null','-'],check=True,capture_output=True)
-    lib = c.CDLL(c.util.find_library('opus'))
+    from native import library
+    lib = library('opus')
     lib.opus_decoder_create.argtypes = [c.c_int,c.c_int,c.POINTER(c.c_int)]
     lib.opus_decoder_create.restype = c.c_void_p
     lib.opus_decode.argtypes = [c.c_void_p,c.c_void_p,c.c_int,c.c_void_p,c.c_int,c.c_int]

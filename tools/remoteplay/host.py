@@ -9,6 +9,8 @@ from pathlib import Path
 import secrets
 import time
 from crypto import Crypto
+from private_files import protect
+from network import configure_udp
 from session import Sessions, Rejected
 
 @dataclass(frozen=True)
@@ -53,6 +55,7 @@ class Store:
         try:
             fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(fd, 'w') as f:
+                protect(temp)
                 json.dump(self.data, f)
                 f.flush()
                 os.fsync(f.fileno())
@@ -192,6 +195,7 @@ class Datagram(asyncio.DatagramProtocol):
         self.host, self.profile = host, profile
 
     def connection_made(self, transport):
+        configure_udp(transport)
         self.transport = transport
 
     def datagram_received(self, data, addr):

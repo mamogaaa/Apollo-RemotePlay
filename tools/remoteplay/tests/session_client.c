@@ -6,8 +6,14 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdatomic.h>
+#ifdef _WIN32
+#include <winsock2.h>
+#include <windows.h>
+#define usleep(us) Sleep((us) / 1000)
+#else
 #include <unistd.h>
 #include <arpa/inet.h>
+#endif
 static atomic_int connected, frames, audio_frames, recovered_frames;
 static FILE *video, *audio;
 static void log_cb(ChiakiLogLevel level, const char *msg, void *user) {
@@ -33,6 +39,10 @@ static void audio_frame(uint8_t *buf, size_t size, void *user) {
     if(buf) atomic_fetch_add(&audio_frames,1);
 }
 int main(int argc, char **argv) {
+#ifdef _WIN32
+    WSADATA winsock;
+    if(WSAStartup(MAKEWORD(2, 2), &winsock)) return 5;
+#endif
     if(argc < 3) return 2;
     ChiakiConnectInfo info = {0};
     info.ps5 = !strcmp(argv[1], "ps5");

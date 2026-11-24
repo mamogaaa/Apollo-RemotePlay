@@ -5,6 +5,7 @@ import unittest
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from host import Host, Store, PROFILES, Datagram, headers
+from private_files import assert_private
 
 class Tests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
@@ -39,7 +40,7 @@ class Tests(unittest.IsolatedAsyncioTestCase):
 
     def test_identity_persisted(self):
         self.assertEqual(self.host.store.data, Store(self.host.store.path).data)
-        self.assertEqual(self.host.store.path.stat().st_mode & 0o777, 0o600)
+        assert_private(self, self.host.store.path)
 
     async def request(self, data):
         server = await asyncio.start_server(self.host.client, '127.0.0.1', 0, limit=8192)

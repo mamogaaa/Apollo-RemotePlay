@@ -1,13 +1,14 @@
 """Research-only ctypes adapter; no key material is logged."""
 import ctypes as c
 from pathlib import Path
+from native import library
 
 class Context(c.Structure):
     _fields_ = [('target', c.c_int), ('bright', c.c_ubyte * 16), ('ambassador', c.c_ubyte * 16)]
 
 class Crypto:
     def __init__(self):
-        self.lib = c.CDLL(str(Path(__file__).parent/'build/librpcrypt.so'))
+        self.lib = library('rpcrypt')
         ptr = c.c_void_p
         signatures = {
             'aeropause': [c.c_int, c.c_size_t, ptr, ptr],

@@ -17,12 +17,14 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.x509.oid import NameOID
+from private_files import protect
 
 
 def private_write(path, data):
     temporary = path.with_suffix(path.suffix + '.tmp')
     fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, 'wb') as stream:
+        protect(temporary)
         stream.write(data)
     os.replace(temporary, path)
 

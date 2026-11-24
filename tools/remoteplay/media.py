@@ -2,6 +2,7 @@
 from pathlib import Path
 import re
 import subprocess
+from native import library
 
 ROOT = Path(__file__).parent/'build'
 
@@ -31,7 +32,7 @@ def prepare_audio():
     import ctypes as c
     import ctypes.util
     import math
-    lib = c.CDLL(c.util.find_library('opus'))
+    lib = library('opus')
     lib.opus_encoder_create.argtypes = [c.c_int,c.c_int,c.c_int,c.POINTER(c.c_int)]
     lib.opus_encoder_create.restype = c.c_void_p
     lib.opus_encode.argtypes = [c.c_void_p,c.c_void_p,c.c_int,c.c_void_p,c.c_int]

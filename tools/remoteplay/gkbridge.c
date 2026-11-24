@@ -8,7 +8,17 @@ void *rp_gk_new(unsigned char index, const unsigned char *handshake, const unsig
 }
 void rp_gk_free(void *ctx) { chiaki_gkcrypt_free(ctx); }
 void *chiaki_aligned_alloc(size_t alignment, size_t size) {
+#ifdef _WIN32
+    return _aligned_malloc(size, alignment);
+#else
     void *p = NULL;
     return posix_memalign(&p, alignment, size) ? NULL : p;
+#endif
 }
-void chiaki_aligned_free(void *p) { free(p); }
+void chiaki_aligned_free(void *p) {
+#ifdef _WIN32
+    _aligned_free(p);
+#else
+    free(p);
+#endif
+}

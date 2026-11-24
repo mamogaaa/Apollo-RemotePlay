@@ -17,6 +17,10 @@ static void done(ChiakiRegistEvent *event, void *user)
 }
 int main(int argc, char **argv)
 {
+#ifdef _WIN32
+    WSADATA winsock;
+    if(WSAStartup(MAKEWORD(2, 2), &winsock)) return 5;
+#endif
     if(argc != 4) return 2;
     ChiakiLog log;
     /* Chiaki INFO logs include decrypted registration hexdumps; keep errors only. */

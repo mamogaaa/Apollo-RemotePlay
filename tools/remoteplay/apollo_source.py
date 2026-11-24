@@ -7,12 +7,13 @@ import queue
 import re
 import threading
 from apollo_control import Apollo
+from native import library
 
 
 class AudioConverter:
     """Convert negotiated Apollo Opus durations into fixed 10 ms Remote Play units."""
     def __init__(self):
-        self.lib = c.CDLL(ctypes.util.find_library('opus'))
+        self.lib = library('opus')
         for name, args, restype in (
             ('opus_decoder_create',[c.c_int,c.c_int,c.POINTER(c.c_int)],c.c_void_p),
             ('opus_encoder_create',[c.c_int,c.c_int,c.c_int,c.POINTER(c.c_int)],c.c_void_p),
@@ -64,7 +65,7 @@ class ApolloSource:
     def __init__(self, directory, appid):
         self.control = Apollo(directory)
         self.appid = appid
-        self.lib = c.CDLL(str(Path(__file__).parent/'build'/'libmoonbridge.so'))
+        self.lib = library('moonbridge')
         callback_type = c.CFUNCTYPE(c.c_int,c.c_int,c.c_void_p,c.c_int,c.c_int)
         self.callback_ref = callback_type(self.callback)
         self.lib.rp_moon_start.argtypes = [c.c_char_p]*5+[c.c_uint32,callback_type]

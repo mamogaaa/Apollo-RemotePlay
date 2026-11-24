@@ -16,6 +16,7 @@ from crypto import GK
 from media import prepare, prepare_audio
 from input import Controller
 from fec import parity
+from network import configure_udp
 sys.path.insert(0, str(Path(__file__).parent/'build'))
 import takion_pb2 as pb
 
@@ -316,6 +317,7 @@ class TakionServer(asyncio.DatagramProtocol):
         self.timer = None
 
     def connection_made(self,transport):
+        configure_udp(transport)
         self.transport = transport
         self.tick()
 

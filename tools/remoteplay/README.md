@@ -58,6 +58,8 @@ Unit-тесты дополнительно покрывают неверные �
 
 ## Сборка и запуск (Linux)
 
+Инструкции Windows и текущий статус локальной проверки: [WINDOWS.md](WINDOWS.md).
+
 Нужны Python >=3.11, C/C++ compiler, CMake, OpenSSL headers, FFmpeg с libx264,
 libopus, protoc, json-c/libevent/miniupnpc development packages и libcurl с WebSocket.
 В текущем окружении проверены Python 3.12, protobuf 7.36.2, cryptography 50.0.0.

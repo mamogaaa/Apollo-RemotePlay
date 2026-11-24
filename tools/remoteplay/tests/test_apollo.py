@@ -107,4 +107,5 @@ class Tests(unittest.TestCase):
                     client.pair('localhost','1234')
                     self.assertTrue(state['accepted'])
                     self.assertEqual(Apollo(Path(tmp)/'client').state['server_der'],cert.public_bytes(serialization.Encoding.DER).hex())
-                    self.assertEqual(client.key_path.stat().st_mode & 0o777,0o600)
+                from private_files import assert_private
+                assert_private(self, client.key_path)
