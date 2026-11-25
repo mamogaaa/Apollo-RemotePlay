@@ -1,3 +1,16 @@
+# Native integration status
+
+The Windows fork now uses direct in-process media output in `src/remoteplay.cpp`.
+Apollo capture/encoding feeds Remote Play without a GameStream intermediary or
+Opus transcoding. Embedded Python handles registration and session negotiation.
+Use `build_direct.ps1` and the authenticated **Remote Play** web page.
+See [NATIVE-VERIFICATION.md](NATIVE-VERIFICATION.md) for current evidence.
+
+The remaining sections document the earlier research host and GameStream bridge.
+They are historical implementation notes, not instructions for the native installer.
+
+---
+
 # Remote Play host: исследовательский прототип
 
 Цель: ПК с Apollo обслуживает неизменённые штатные клиенты PS5 (профиль

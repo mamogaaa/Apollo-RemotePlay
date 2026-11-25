@@ -1,3 +1,6 @@
+#ifdef APOLLO_REMOTEPLAY
+#include "remoteplay.h"
+#endif
 /**
  * @file src/nvhttp.cpp
  * @brief Definitions for the nvhttp (GameStream) server.
@@ -1159,6 +1162,14 @@ namespace nvhttp {
       response->write(data.str());
       response->close_connection_after_response = true;
     });
+#ifdef APOLLO_REMOTEPLAY
+    if(remoteplay::active()) {
+      tree.put("root.<xmlattr>.status_code",503);
+      tree.put("root.<xmlattr>.status_message","Remote Play session is active");
+      return;
+    }
+#endif
+
 
     auto args = request->parse_query_string();
 
@@ -1356,6 +1367,14 @@ namespace nvhttp {
       response->write(data.str());
       response->close_connection_after_response = true;
     });
+#ifdef APOLLO_REMOTEPLAY
+    if(remoteplay::active()) {
+      tree.put("root.<xmlattr>.status_code",503);
+      tree.put("root.<xmlattr>.status_message","Remote Play session is active");
+      return;
+    }
+#endif
+
 
     auto named_cert_p = get_verified_cert(request);
     if (!(named_cert_p->perm & PERM::_allow_view)) {

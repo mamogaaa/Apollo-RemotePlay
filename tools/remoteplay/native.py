@@ -7,7 +7,7 @@ from pathlib import Path
 BUILD = Path(__file__).resolve().parent / 'build'
 _directories = []
 if os.name == 'nt':
-    for directory in (BUILD, Path(os.environ.get('REMOTEPLAY_NATIVE_BIN', r'C:\msys64\ucrt64\bin'))):
+    for directory in (BUILD, Path(os.environ['REMOTEPLAY_NATIVE_BIN']) if os.environ.get('REMOTEPLAY_NATIVE_BIN') else BUILD):
         if directory.is_dir():
             _directories.append(os.add_dll_directory(str(directory)))
 

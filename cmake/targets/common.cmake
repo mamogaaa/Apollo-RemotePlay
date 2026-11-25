@@ -126,3 +126,12 @@ if("${BUILD_TYPE}" STREQUAL "XDEBUG")
 else()
     add_definitions(-DNDEBUG)
 endif()
+
+# Remote Play uses the existing capture/encoder pipeline inside this process.
+option(APOLLO_REMOTEPLAY "Build the direct Windows Remote Play backend" OFF)
+if(APOLLO_REMOTEPLAY AND WIN32)
+    find_package(Python3 REQUIRED COMPONENTS Development.Embed)
+    target_sources(sunshine PRIVATE "${CMAKE_SOURCE_DIR}/src/remoteplay.cpp")
+    target_compile_definitions(sunshine PRIVATE APOLLO_REMOTEPLAY)
+    target_link_libraries(sunshine Python3::Python)
+endif()

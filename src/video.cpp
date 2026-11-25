@@ -1,3 +1,6 @@
+#ifdef APOLLO_REMOTEPLAY
+#include "remoteplay.h"
+#endif
 /**
  * @file src/video.cpp
  * @brief Definitions for video.
@@ -1479,6 +1482,9 @@ namespace video {
 
       packet->replacements = &session.replacements;
       packet->channel_data = channel_data;
+#ifdef APOLLO_REMOTEPLAY
+      if (remoteplay::submit_video(channel_data, *packet)) continue;
+#endif
       packets->raise(std::move(packet));
     }
 
@@ -1500,6 +1506,9 @@ namespace video {
     packet->channel_data = channel_data;
     packet->after_ref_frame_invalidation = encoded_frame.after_ref_frame_invalidation;
     packet->frame_timestamp = frame_timestamp;
+#ifdef APOLLO_REMOTEPLAY
+    if (remoteplay::submit_video(channel_data, *packet)) return 0;
+#endif
     packets->raise(std::move(packet));
 
     return 0;

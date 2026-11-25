@@ -1,3 +1,6 @@
+#ifdef APOLLO_REMOTEPLAY
+#include "remoteplay.h"
+#endif
 /**
  * @file src/audio.cpp
  * @brief Definitions for audio capture and encoding.
@@ -123,6 +126,9 @@ namespace audio {
       }
 
       packet.fake_resize(bytes);
+#ifdef APOLLO_REMOTEPLAY
+      if (remoteplay::submit_audio(channel_data, packet.begin(), packet.size())) continue;
+#endif
       packets->raise(channel_data, std::move(packet));
     }
   }
@@ -218,6 +224,7 @@ namespace audio {
     });
 
     int samples_per_frame = frame_size * stream.channelCount;
+    auto next_silent_frame = std::chrono::steady_clock::now();
 
     while (!shutdown_event->peek()) {
       std::vector<float> sample_buffer;
@@ -228,7 +235,13 @@ namespace audio {
         case platf::capture_e::ok:
           break;
         case platf::capture_e::timeout:
-          continue;
+          if (!config.silence_on_timeout) continue;
+          // WASAPI loopback stops reporting samples when no application plays audio.
+          // Keep Remote Play's audio clock alive using encoded silence, without replaying old PCM.
+          next_silent_frame = std::max(next_silent_frame + std::chrono::milliseconds(config.packetDuration), std::chrono::steady_clock::now());
+          std::this_thread::sleep_until(next_silent_frame);
+          std::fill(sample_buffer.begin(), sample_buffer.end(), 0.0f);
+          break;
         case platf::capture_e::reinit:
           if (config::audio.auto_capture) {
             BOOST_LOG(info) << "Reinitializing audio capture"sv;

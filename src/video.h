@@ -48,6 +48,7 @@ namespace video {
 
     int encodingFramerate; // Requested display framerate
     bool input_only;
+    int profile = 100;  // H.264 High; preserve the default for GameStream clients.
   };
 
   platf::mem_type_e map_base_dev_type(AVHWDeviceType type);

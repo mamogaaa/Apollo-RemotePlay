@@ -34,6 +34,7 @@ class Connection:
         self.rx_queue = {}
         self.tx = self.rx = None
         self.position = 0
+        self.native_keys = False
         self.video_index = 0
         self.task = None
         self.audio_task = None
@@ -74,8 +75,13 @@ class Connection:
         return bytes(packet)
 
     def control(self, kind, payload=b'', flags=0, reliable=False, plain=False):
-        pos = self.position if self.tx and not plain else 0
-        if self.tx and not plain: self.position += ((len(payload)+31)//16)*16
+        pos = 0
+        if self.tx and not plain:
+            if self.native_keys:
+                pos = self.server.source.reserve(len(payload))
+            else:
+                pos = self.position
+                self.position += ((len(payload)+31)//16)*16
         packet = b'\0' + struct.pack('!I4sIBBH', self.peer_tag, bytes(4), pos, kind, flags, len(payload)+4) + payload
         if not plain: packet = self.sign(packet, pos)
         self.send(packet)
@@ -190,16 +196,22 @@ class Connection:
             self.message(reply,plain=True)
             self.tx = GK(self.server.host.crypto.lib,3,handshake,secret)
             self.rx = GK(self.server.host.crypto.lib,2,handshake,secret)
+            self.handshake, self.shared_secret = handshake, secret
             self.bang = True
             self.server.host.sessions.event('takion_keys_ready',self.active.pending.profile)
             # Wait until the client processes BANG and installs its receiving keys.
             self.prepare_task = asyncio.create_task(self.prepare_stream())
         elif msg.type == pb.TakionMessage.STREAMINFOACK and self.task is None:
-            self.task = asyncio.create_task(self.video())
-            self.audio_task = asyncio.create_task(self.audio())
+            if getattr(self.server.source, 'native', False):
+                self.server.source.stream()
+                self.task = asyncio.create_task(self.native_monitor())
+            else:
+                self.task = asyncio.create_task(self.video())
+                self.audio_task = asyncio.create_task(self.audio())
             self.server.host.sessions.event('stream_started',self.active.pending.profile)
         elif msg.type in (pb.TakionMessage.IDRREQUEST,pb.TakionMessage.CORRUPTFRAME):
-            if self.server.source: self.server.source.lib.rp_moon_idr()
+            if getattr(self.server.source, 'native', False): self.server.source.idr()
+            elif self.server.source: self.server.source.lib.rp_moon_idr()
         elif msg.type == pb.TakionMessage.HEARTBEAT:
             self.message(pb.TakionMessage(type=pb.TakionMessage.HEARTBEAT))
 
@@ -207,7 +219,10 @@ class Connection:
         try:
             if self.server.source:
                 self.source_started = True
-                self.server.video_header = await self.server.source.begin()
+                if getattr(self.server.source, 'native', False):
+                    self.server.video_header = await self.server.source.begin_connection(self)
+                else:
+                    self.server.video_header = await self.server.source.begin()
             await asyncio.sleep(.05)
             if not self.closed: self.stream_info()
         except asyncio.CancelledError:
@@ -245,6 +260,10 @@ class Connection:
         msg.stream_info_payload.audio_header = struct.pack('!BBIII',2,16,48000,480,1)
         msg.stream_info_payload.congestion_control_interval = 1000
         self.message(msg)
+
+    async def native_monitor(self):
+        while not self.closed:
+            await asyncio.sleep(1)
 
     async def video(self):
         frame_index = 0

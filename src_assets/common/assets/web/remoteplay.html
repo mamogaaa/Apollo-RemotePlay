@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="auto">
+<head><%- header %></head>
+<body id="app" v-cloak><Navbar></Navbar>
+<main class="container py-4" style="max-width:900px">
+<h1>Apollo Remote Play</h1>
+<p>Stream this PC using a PS4 or PS5 Remote Play profile.</p>
+<div class="alert alert-warning">Experimental. Chiaki-ng is the test client. Compatibility with physical Sony consoles is not yet verified.</div>
+<div v-if="error" class="alert alert-danger" role="alert">{{ error }}</div>
+<section class="card p-4 mb-4">
+<h2 class="h4">Connection</h2>
+<p role="status">{{ status.ready ? 'Ready' : (status.error || 'Starting…') }} <span v-if="status.sessions?.length"> · Connected: {{ status.sessions.join(', ') }}</span></p>
+<p class="mb-1">PS4 and PS5 profiles · H.264 · 720p60 · Stereo audio</p>
+<p v-if="status.bind==='127.0.0.1'" class="text-warning">Local testing only. Select this PC’s LAN IPv4 address below to connect from another device.</p>
+<label class="form-label" for="bind">Listen on IPv4 address</label>
+<input id="bind" class="form-control mb-3" v-model="bind" placeholder="127.0.0.1" :disabled="busy">
+<label class="form-label" for="application">Desktop or application</label>
+<select id="application" class="form-select mb-3" v-model="appid" :disabled="busy"><option v-for="app in status.apps" :value="app.id">{{ app.name }}</option></select>
+<p class="small text-body-secondary">Changing connection settings disconnects the current Remote Play session. A Private-network firewall rule is required for LAN clients.</p>
+<button class="btn btn-primary align-self-start" :disabled="busy || !appid" @click="save">Save connection settings</button>
+</section>
+<section class="card p-4 mb-4">
+<h2 class="h4">Register a Remote Play client</h2>
+<p>Generate an eight-digit code, then enter it in your Remote Play client. Choose PS4 or PS5 in Chiaki-ng. This code is separate from Apollo’s Moonlight pairing PIN.</p>
+<template v-if="status.pin && status.pairing_seconds>0">
+<output aria-label="Remote Play registration code" class="display-4 font-monospace mb-2" style="letter-spacing:.15em">{{ status.pin }}</output>
+<p role="status">Expires in {{ Math.floor(status.pairing_seconds/60) }}:{{ String(status.pairing_seconds%60).padStart(2,'0') }}</p>
+</template>
+<p v-else>Registration is closed. Previously registered clients can still connect.</p>
+<div class="d-flex gap-2"><button class="btn btn-primary" :disabled="busy || !status.ready" @click="command({action:'pair'})">{{ status.pin ? 'Generate new code' : 'Show registration code' }}</button><button class="btn btn-outline-secondary" v-if="status.pin" :disabled="busy" @click="command({action:'close_pairing'})">Close registration</button></div>
+</section>
+<p class="small">Capture starts when a client connects and stops when it disconnects. Remote Play runs inside Apollo and starts with its Windows service.</p>
+</main></body>
+<script type="module">
+import {createApp} from 'vue'; import {initApp} from './init'; import Navbar from './Navbar.vue';
+const app=createApp({components:{Navbar},data:()=>({status:{},bind:'127.0.0.1',appid:'',loaded:false,busy:false,error:'',timer:null}),
+mounted(){this.refresh();this.timer=setInterval(()=>this.refresh(),1000)},beforeUnmount(){clearInterval(this.timer)},methods:{
+async refresh(){try{const response=await fetch('/api/remoteplay',{cache:'no-store'});if(!response.ok)throw Error('Sign in to Apollo to view Remote Play settings.');this.status=await response.json();if(!this.loaded&&this.status.configuration){this.bind=this.status.configuration.bind;this.appid=String(this.status.configuration.appid);this.loaded=true}}catch(e){this.error=e.message}},
+async command(body){this.busy=true;this.error='';try{const response=await fetch('/api/remoteplay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!response.ok)throw Error('Could not apply settings. Check the address and Apollo logs.');await this.refresh()}catch(e){this.error=e.message}finally{this.busy=false}},
+save(){if(this.status.sessions?.length&&!confirm('Disconnect the current Remote Play session and apply these settings?'))return;this.command({action:'configure',bind:this.bind,appid:Number(this.appid)})}
+}});initApp(app);
+</script></html>

@@ -1,3 +1,6 @@
+#ifdef APOLLO_REMOTEPLAY
+#include "remoteplay.h"
+#endif
 /**
  * @file src/main.cpp
  * @brief Definitions for the main entry point for Sunshine.
@@ -453,11 +456,17 @@ int main(int argc, char *argv[]) {
 #endif
   }
 
+#ifdef APOLLO_REMOTEPLAY
+  remoteplay::start();
+#endif
   mainThreadLoop(shutdown_event);
 
   // Wait for shutdown, this is not necessary when we're using the main event loop
   shutdown_event->view();
 
+#ifdef APOLLO_REMOTEPLAY
+  remoteplay::stop();
+#endif
   httpThread.join();
   configThread.join();
   rtspThread.join();

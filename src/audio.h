@@ -61,6 +61,7 @@ namespace audio {
     uint64_t __padding;
 
     bool input_only;
+    bool silence_on_timeout = false;
   };
 
   struct audio_ctx_t {

@@ -1,3 +1,47 @@
+# Native Windows build
+
+The direct integration supersedes the separate GameStream adapter documented
+below. The current native test record is [NATIVE-VERIFICATION.md](NATIVE-VERIFICATION.md).
+
+Use Windows Python 3.13 x64, Node.js, MSYS2 UCRT64 and the Windows SDK.
+In addition to the packages below, install UCRT64 cppwinrt, MinHook, nsis, onevpl
+and nlohmann-json. Initialize Apollo submodules (including build-deps,
+libdisplaydevice, ViGEmClient, nv-codec-headers, nvapi and tray).
+Create `.venv` and install `tools/remoteplay/requirements.txt`.
+Checkout the pinned Chiaki source as described below.
+
+```powershell
+.\tools\remoteplay\build_direct.ps1
+# Optional installer; requires 7-Zip to extract the pinned official signed driver:
+.\tools\remoteplay\build_direct.ps1 -Package
+```
+
+Run `build-release/sunshine.exe` from its build directory for an isolated test.
+Its configuration is in `build-release/config`; do not run it concurrently with
+an installed Apollo using the same ports. The installer embeds Python and native
+libraries; the target machine needs neither MSYS2 nor a separate Python install.
+
+The authenticated web page `/remoteplay` configures the listening IPv4 address
+and app. Generate the eight-digit PIN there and enter it in Chiaki registration.
+The normal four-digit GameStream pairing page is unrelated. Registration is closed
+at startup and after five minutes; stored clients can reconnect without opening it.
+
+For repeatable tests against an already running native build:
+
+```powershell
+$env:REMOTEPLAY_NATIVE_BIN = 'C:\msys64\ucrt64\bin'
+.\.venv\Scripts\python.exe tools/remoteplay/tests/native_integration.py `
+  --state build-release/config/remoteplay/clients.json --output work/native-e2e
+```
+
+This starts no fixture or bridge. A separately running real desktop application
+must supply sound and demonstrate XInput response. GUI acceptance additionally
+uses the unchanged official Chiaki binary. Keep credentials and recordings local.
+
+---
+
+# Historical GameStream adapter verification and build instructions
+
 # Windows: сборка и локальная проверка
 
 ## Подтверждённый статус, 25 ноября 2026

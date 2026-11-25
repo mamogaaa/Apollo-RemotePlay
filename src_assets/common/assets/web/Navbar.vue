@@ -28,6 +28,7 @@
           <li class="nav-item">
             <a class="nav-link" href="./troubleshooting"><i class="fas fa-fw fa-info"></i> {{ $t('navbar.troubleshoot') }}</a>
           </li>
+          <li class="nav-item"><a class="nav-link" href="./remoteplay">Remote Play</a></li>
           <li class="nav-item">
             <ThemeToggle/>
           </li>

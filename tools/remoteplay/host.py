@@ -206,13 +206,16 @@ class Datagram(asyncio.DatagramProtocol):
         if reply:
             self.transport.sendto(reply, addr)
 
-async def serve(args):
+async def serve(args, on_ready=None):
     host = Host(Store(args.state), secrets.randbelow(100000000), args.pairing_seconds)
     transports = []
     server = None
     source = None
     try:
-        if args.apollo_state:
+        if getattr(args, 'direct', False):
+            from direct_source import DirectSource
+            source = DirectSource(args.apollo_app)
+        elif args.apollo_state:
             from apollo_source import ApolloSource
             source = ApolloSource(args.apollo_state,args.apollo_app)
             await source.start()
@@ -228,16 +231,25 @@ async def serve(args):
             transports.append(transport)
         server = await asyncio.start_server(host.client, args.bind, 9295, limit=8192)
         source_name = 'Apollo live H.264 720p60 + Opus stereo' if source else 'test H.264 720p60 + Opus stereo'
-        print(f'Pairing PIN: {host.pin:08d} (valid {args.pairing_seconds}s). Source: {source_name}.', flush=True)
+        if on_ready:
+            on_ready(host)
+            print(f'Remote Play ready on {args.bind}. Source: {source_name}.', flush=True)
+        else:
+            print(f'Pairing PIN: {host.pin:08d} (valid {args.pairing_seconds}s). Source: {source_name}.', flush=True)
         async with server:
             await server.serve_forever()
     finally:
+        # Stop native senders before closing their borrowed UDP socket.
+        for transport in transports:
+            protocol = transport.get_protocol()
+            for conn in getattr(protocol, "connections", {}).values():
+                conn.close()
+        if source: await source.close()
         for transport in transports:
             transport.close()
         if server:
             server.close()
             await server.wait_closed()
-        if source: await source.close()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)

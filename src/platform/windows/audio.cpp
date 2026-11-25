@@ -507,7 +507,8 @@ namespace platf::audio {
 
       REFERENCE_TIME default_latency;
       audio_client->GetDevicePeriod(&default_latency, nullptr);
-      default_latency_ms = default_latency / 1000;
+      // GetDevicePeriod returns 100-nanosecond units; WaitForSingleObjectEx uses milliseconds.
+      default_latency_ms = std::max<REFERENCE_TIME>(1, (default_latency + 9999) / 10000);
 
       std::uint32_t frames;
       status = audio_client->GetBufferSize(&frames);

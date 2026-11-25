@@ -312,6 +312,60 @@ namespace confighttp {
    * @param response The HTTP response object.
    * @param request The HTTP request object.
    */
+  void getRemotePlayPage(resp_https_t response, req_https_t request) {
+    if (!authenticate(response, request, true)) return;
+    response->write(file_handler::read_file(WEB_DIR "remoteplay.html"),
+      {{"Content-Type", "text/html; charset=utf-8"}, {"Cache-Control", "no-store"}, {"X-Frame-Options", "DENY"}});
+  }
+
+  void getRemotePlay(resp_https_t response, req_https_t request) {
+    if (!authenticate(response, request)) return;
+    nlohmann::json result;
+    auto directory = platf::appdata() / "remoteplay";
+    try {
+      result = nlohmann::json::parse(file_handler::read_file((directory / "status.json").string().c_str()));
+      auto now = std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
+      if (now - result.value("updated", 0.0) > 5) { result["ready"]=false; result["pin"]=nullptr; result["error"]="Remote Play is not responding"; }
+      result["configuration"] = nlohmann::json::parse(file_handler::read_file((directory / "config.json").string().c_str()));
+    } catch (...) { result["ready"]=false; result["error"]="Remote Play is starting or not installed"; }
+    result["apps"]=nlohmann::json::array();
+    for (auto& app : proc::proc.get_apps()) result["apps"].push_back({{"id",app.id},{"name",app.name}});
+    response->write(result.dump(), {{"Content-Type","application/json"},{"Cache-Control","no-store"}});
+  }
+
+  void setRemotePlay(resp_https_t response, req_https_t request) {
+    if (!validateContentType(response,request,"application/json") || !authenticate(response,request)) return;
+    try {
+      auto body=request->content.string();
+      if (body.size()>4096) throw std::runtime_error("Request too large");
+      auto value=nlohmann::json::parse(body);
+      auto directory=platf::appdata()/"remoteplay";
+      if (!fs::exists(directory)) throw std::runtime_error("Remote Play is not installed");
+      auto action=value.value("action", "");
+      if(action=="configure") {
+        auto bind=boost::asio::ip::make_address_v4(value.at("bind").get<std::string>()).to_string();
+        auto appid=value.at("appid").get<int>();
+        const auto& apps=proc::proc.get_apps();
+        if(std::none_of(apps.begin(),apps.end(),[appid](const auto& app){return app.id==std::to_string(appid);})) throw std::runtime_error("Unknown application");
+        std::ofstream file(directory/"config.json",std::ios::trunc);file<<nlohmann::json({{"bind",bind},{"appid",appid}}).dump();file.close();
+        if(!file)throw std::runtime_error("Cannot save configuration");
+        action="reload";
+      }
+      if(action!="pair" && action!="close_pairing" && action!="reload")throw std::runtime_error("Unknown action");
+      // Only the authenticated management UI can write the protected local mailbox.
+      auto pending=directory/"command.new";
+      std::ofstream file(pending,std::ios::trunc);file<<nlohmann::json({{"action",action}}).dump();file.close();
+      if(!file)throw std::runtime_error("Cannot submit command");
+      auto target=directory/"command.json";
+#ifdef _WIN32
+      if(!MoveFileExW(pending.c_str(),target.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH))throw std::runtime_error("Cannot submit command");
+#else
+      fs::rename(pending,target);
+#endif
+      send_response(response,nlohmann::json({{"status",true}}));
+    }catch(const std::exception& e){bad_request(response,request,e.what());}
+  }
+
   void getPinPage(resp_https_t response, req_https_t request) {
     if (!authenticate(response, request, true)) {
       return;
@@ -1524,6 +1578,9 @@ namespace confighttp {
     server.default_resource["GET"] = not_found;
     server.resource["^/$"]["GET"] = getIndexPage;
     server.resource["^/pin/?$"]["GET"] = getPinPage;
+    server.resource["^/remoteplay/?$"]["GET"] = getRemotePlayPage;
+    server.resource["^/api/remoteplay$"]["GET"] = getRemotePlay;
+    server.resource["^/api/remoteplay$"]["POST"] = setRemotePlay;
     server.resource["^/apps/?$"]["GET"] = getAppsPage;
     server.resource["^/config/?$"]["GET"] = getConfigPage;
     server.resource["^/password/?$"]["GET"] = getPasswordPage;

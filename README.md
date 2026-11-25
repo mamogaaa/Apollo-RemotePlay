@@ -1,73 +1,66 @@
 # Apollo Remote Play
 
 An experimental fork of [ClassicOldSong/Apollo](https://github.com/ClassicOldSong/Apollo)
-that streams a Windows PC desktop or game to Remote Play clients.
+that streams a Windows desktop or game to Remote Play clients.
 
-The fork adds a **PS4/PS5 Remote Play server and an adapter to real Apollo**.
-Apollo captures and encodes the desktop; the adapter receives its GameStream
-stream through Moonlight transport and serves it over the Remote Play protocol.
-Client controller input travels back through the adapter to Apollo.
+Remote Play is integrated directly into Apollo. Capture and hardware H.264
+encoding happen once; native C++ packetizes, adds FEC, encrypts and sends the
+encoded frames straight to the client. Audio is captured and encoded as 10 ms
+Opus packets once. Controller input goes directly to Apollo's input subsystem.
+**No intermediate GameStream/Moonlight stream and no audio transcoding.**
 
 ```text
-Windows desktop / game → Apollo → GameStream adapter → Remote Play client
-Windows app input      ← Apollo ← controller input   ← Remote Play client
+Desktop/game -> Apollo capture + encoder -> Remote Play -> client
+Application  <- Apollo input            <- Remote Play <- controller
 ```
 
-## What works today
+An isolated Python runtime is embedded for registration and session negotiation.
+Video/audio transmission runs in C++, without Python media queues.
 
-The first milestone has been tested on Windows with **real Apollo v0.3.0 and
-an unchanged official Chiaki-ng 1.10.1 client**, using both PS4 and PS5 server
-profiles:
+## Verified behavior
 
-- Live desktop video, H.264 SDR at 720p60.
-- Stereo Opus audio, including verified output from the Chiaki audio device.
-- Controller input reaching a real Windows application through XInput.
-- Disconnecting and reconnecting to both server profiles.
-- PIN registration, persistent pairing keys and session authentication.
+The native Windows build has been tested with unchanged official Chiaki-ng 1.10.1:
+PS4 and PS5 profiles display the real desktop, output Opus audio, and control a
+separate Windows application through XInput. The unchanged Chiaki engine also
+passed both profiles and reconnection. See [native verification](tools/remoteplay/NATIVE-VERIFICATION.md)
+for exact evidence, performance measurements and limitations.
 
-This verification used Apollo desktop capture, not the adapter's synthetic media
-source. See the [verification report](tools/remoteplay/WINDOWS-VERIFICATION.md)
-for evidence and limits.
-
-## Where this is heading
-
-The goal is to let unmodified Sony console Remote Play clients use the PC as the
-remote host, without modifying the consoles:
+## Intended console support
 
 | Client console | PC presents itself as |
 | --- | --- |
 | PS5 | PS4 |
 | PS4 | PS5 |
 
-**Physical consoles and official Sony Remote Play clients have not been tested.**
-Successful Chiaki testing does not establish compatibility with them. This remains
-an experimental prototype, with one active stream at a time and H.264 SDR support.
-HDR and the other upstream Apollo features described below are not promises about
-the new Remote Play path.
+**Physical consoles and Sony's own Remote Play clients remain unverified.**
+Chiaki success does not prove Sony compatibility. This is experimental software,
+currently limited to one active client and H.264 SDR 720p60. Upstream features
+listed below are not promises about the Remote Play path.
 
-## Build and try it
+## Build and connect
 
-Start with the [Windows build and launch guide](tools/remoteplay/WINDOWS.md).
-The implementation, protocol notes and test commands are in
-[tools/remoteplay](tools/remoteplay/README.md).
+Use `tools/remoteplay/build_direct.ps1`; add `-Package` to create an NSIS installer.
+The package includes the embedded runtime; no separate Python installation or
+adapter process is needed on the target PC. See the [Windows guide](tools/remoteplay/WINDOWS.md).
 
-The Remote Play host is currently a separate Python process with native DLLs,
-not an option integrated into Apollo's web interface or installer. Pair the
-adapter with an installed Apollo, grant its client Launch Apps and Controller
-Input permissions, then launch the host with `--apollo-state` and `--apollo-app`.
-Without those options, the host uses a synthetic test source.
+Open **Remote Play** in Apollo's authenticated web interface, select a listening
+IPv4 address and application, save, and generate an eight-digit pairing PIN.
+It expires after five minutes. Pairing is closed at startup; registered clients
+can reconnect without a new PIN. Capture starts on client connection and stops
+on disconnect. Default binding is loopback; select the PC's LAN address for other
+devices. Use a trusted LAN.
 
-For the verified Chiaki configuration, use H.264, 720p60 and SDR. When testing on
-the same PC, follow the guide's display, audio and virtual-controller isolation
-steps. Chiaki treats `127.0.0.1` as a Remote connection, so configure its Remote
-PS5 codec as well as Local PS5.
+Configure Chiaki for H.264, 720p60, SDR. Chiaki treats loopback as a Remote
+connection, so set Remote PS5 codec as well as Local PS5. Same-PC tests require
+separate capture/playback audio devices and virtual-controller feedback isolation.
 
 ## Relationship to upstream
 
-This is an independent research fork, not an official Apollo or Sony release.
-The new work lives in `tools/remoteplay`; upstream Apollo remains the capture,
-encoding, virtual-display and GameStream host. Original project information and
-credits follow below.
+This is an independent fork, not an official Apollo or Sony release. Native media
+integration is in `src/remoteplay.cpp`; control-plane code and build tools are in
+`tools/remoteplay`. Apollo supplies capture, encoding, virtual displays and input.
+The older GameStream adapter remains research code and is not used by this build.
+Original project information and credits follow.
 
 ---
 

@@ -26,7 +26,8 @@ install(TARGETS audio-info RUNTIME DESTINATION "tools" COMPONENT audio)
 install(TARGETS sunshinesvc RUNTIME DESTINATION "tools" COMPONENT application)
 
 # Drivers
-install(DIRECTORY "${SUNSHINE_SOURCE_ASSETS_DIR}/windows/drivers/sudovda"
+set(APOLLO_SUDOVDA_DIRECTORY "${SUNSHINE_SOURCE_ASSETS_DIR}/windows/drivers/sudovda" CACHE PATH "Signed SudoVDA driver distribution")
+install(DIRECTORY "${APOLLO_SUDOVDA_DIRECTORY}"
         DESTINATION "drivers"
         COMPONENT sudovda)
 
@@ -124,3 +125,11 @@ set(CPACK_COMPONENT_GAMEPAD_GROUP "Scripts")
 # include specific packaging
 include(${CMAKE_MODULE_PATH}/packaging/windows_nsis.cmake)
 include(${CMAKE_MODULE_PATH}/packaging/windows_wix.cmake)
+
+if(APOLLO_REMOTEPLAY)
+    install(DIRECTORY "${CMAKE_BINARY_DIR}/remoteplay" DESTINATION "." COMPONENT application
+            PATTERN "__pycache__" EXCLUDE)
+    install(FILES "${CMAKE_BINARY_DIR}/python313.dll" "${CMAKE_BINARY_DIR}/python3.dll"
+                  "${CMAKE_BINARY_DIR}/vcruntime140.dll" "${CMAKE_BINARY_DIR}/vcruntime140_1.dll"
+            DESTINATION "." COMPONENT application)
+endif()

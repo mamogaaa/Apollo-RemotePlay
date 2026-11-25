@@ -58,3 +58,4 @@ package-lock.json
 venv/
 .venv/
 work/
+build-release/
