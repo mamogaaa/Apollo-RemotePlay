@@ -109,3 +109,28 @@ class Tests(unittest.TestCase):
                     self.assertEqual(Apollo(Path(tmp)/'client').state['server_der'],cert.public_bytes(serialization.Encoding.DER).hex())
                 from private_files import assert_private
                 assert_private(self, client.key_path)
+
+class SilenceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_silence_waits_but_transport_failure_interrupts(self):
+        import asyncio
+        source = ApolloSource.__new__(ApolloSource)
+        source.error = None
+        source.audio_queue = queue.Queue()
+        task = asyncio.create_task(source.audio())
+        try:
+            await asyncio.sleep(.02)
+            self.assertFalse(task.done())
+            source.audio_queue.put(b'resumed')
+            self.assertEqual(await asyncio.wait_for(task, 1), b'resumed')
+            source.error = 'transport disconnected'
+            with self.assertRaisesRegex(RuntimeError, 'transport disconnected'):
+                await source.audio()
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    async def test_video_timeout_is_retained(self):
+        source = ApolloSource.__new__(ApolloSource)
+        source.error = None
+        with self.assertRaises(TimeoutError):
+            await source.next_packet(queue.Queue(), timeout=.01)

@@ -133,17 +133,19 @@ class ApolloSource:
                 await asyncio.sleep(.01)
         return self.header
 
-    async def next_packet(self,q):
-        deadline = asyncio.get_running_loop().time()+10
+    async def next_packet(self,q,timeout=10):
+        deadline = asyncio.get_running_loop().time()+timeout if timeout else None
         while True:
-            if asyncio.get_running_loop().time() > deadline:
+            if deadline is not None and asyncio.get_running_loop().time() > deadline:
                 raise TimeoutError("Apollo stopped producing media")
             if self.error: raise RuntimeError(self.error)
             try: return q.get_nowait()
             except queue.Empty: await asyncio.sleep(.001)
 
     async def video(self): return await self.next_packet(self.video_queue)
-    async def audio(self): return await self.next_packet(self.audio_queue)
+    # WASAPI loopback may emit no packets when no application is playing sound.
+    # Silence must not terminate the video session; transport failures still raise.
+    async def audio(self): return await self.next_packet(self.audio_queue,timeout=None)
 
     def input(self,controller):
         if self.started: self.lib.rp_moon_input(*map_controller(controller))
