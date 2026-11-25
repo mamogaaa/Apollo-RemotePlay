@@ -133,7 +133,7 @@ Chiaki 1.10.1 классифицирует loopback как Remote, поэтом�
 Speakers (Steam Streaming Speakers), который захватывает Apollo. Иначе получается
 аудиопетля. На другом клиентском устройстве эта изоляция не нужна.
 
-Apollo `dd_configuration_option=ensure_active` сохраняет физические экраны.
+Для проверки на одном ПК использовался `dd_configuration_option=ensure_active`, сохраняющий физические экраны. После проверки по просьбе владельца возвращён `ensure_only_display`: при стриме физические экраны снова отключаются.
 При необходимости `DisplaySwitch.exe /extend` восстанавливает расширенный стол.
 Окно Chiaki должно находиться на физическом экране, вне виртуального захвата Apollo.
 Проверочное приложение `python tools/remoteplay/tests/desktop_probe.py` разместить
