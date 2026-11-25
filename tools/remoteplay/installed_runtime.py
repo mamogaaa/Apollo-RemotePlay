@@ -26,7 +26,16 @@ def write_json(path, value):
             json.dump(value, f)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(temp, path)
+        # Windows readers may briefly open the destination without FILE_SHARE_DELETE.
+        # Keep the previous complete document until an atomic replacement succeeds.
+        for attempt in range(8):
+            try:
+                os.replace(temp, path)
+                break
+            except OSError as exc:
+                if getattr(exc, "winerror", None) not in (5, 32, 33) or attempt == 7:
+                    raise
+                time.sleep(min(0.005 * 2**attempt, 0.05))
     finally:
         temp.unlink(missing_ok=True)
 
@@ -51,6 +60,16 @@ def load_config(directory=DATA):
         pairing_seconds=0,
         direct=True,
     )
+
+
+async def publish_status(directory, status):
+    # Disk contention must never terminate the listener or block its event loop.
+    try:
+        await asyncio.to_thread(write_json, directory / "status.json", status)
+    except OSError:
+        logging.warning(
+            "Cannot publish Remote Play status; retrying on the next update"
+        )
 
 
 async def run_managed(stop, directory=DATA):
@@ -121,12 +140,12 @@ async def run_managed(stop, directory=DATA):
             )
             if host:
                 status["bind"] = args.bind
-            write_json(directory / "status.json", status)
+            await publish_status(directory, status)
             await asyncio.sleep(0.5)
     finally:
         await shutdown()
-        write_json(
-            directory / "status.json",
+        await publish_status(
+            directory,
             dict(
                 version=VERSION,
                 updated=time.time(),
